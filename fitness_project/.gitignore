@@ -1,0 +1,33 @@
+--- Archivos de Base de Datos y Respaldo ---
+
+*.sqlite3
+*.json
+*.csv
+*.sql
+
+--- Archivos de Configuración Local y Secretos ---
+
+.env
+.env.local
+
+--- Python ---
+
+pycache/
+*.py[cod]
+*$py.class
+
+--- Entornos Virtuales ---
+
+venv/
+env/
+.venv/
+
+--- Archivos del Sistema Operativo ---
+
+.DS_Store
+Thumbs.db
+
+--- IDEs (Visual Studio Code, Pycharm) ---
+
+.vscode/
+.idea/
