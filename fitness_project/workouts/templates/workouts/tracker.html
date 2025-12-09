@@ -17,10 +17,17 @@
                     animation: {
                         'fade-in': 'fadeIn 0.3s ease-out forwards',
                         'slide-up': 'slideUp 0.3s ease-out forwards',
+                        'blob': 'blob 7s infinite', // Aseguro que la animación blob esté definida si se usa
                     },
                     keyframes: {
                         fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
-                        slideUp: { '0%': { opacity: '0', transform: 'translateY(10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } }
+                        slideUp: { '0%': { opacity: '0', transform: 'translateY(10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+                        blob: {
+                            '0%': { transform: 'translate(0px, 0px) scale(1)' },
+                            '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+                            '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+                            '100%': { transform: 'translate(0px, 0px) scale(1)' }
+                        }
                     }
                 }
             }
@@ -30,16 +37,37 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        html { scroll-behavior: smooth; }
+        /* Optimización: Scroll behavior suave solo si el usuario no prefiere movimiento reducido */
+        @media (prefers-reduced-motion: no-preference) {
+            html { scroll-behavior: smooth; }
+        }
+        
         body { background-color: #F2F2F7; -webkit-font-smoothing: antialiased; }
         .dark body { background-color: #000000; }
-        .glass-panel { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid rgba(0,0,0,0.05); }
+        
+        /* Optimización: will-change para promover capas en la GPU y evitar repaints masivos */
+        .glass-panel { 
+            background: rgba(255, 255, 255, 0.85); 
+            backdrop-filter: blur(12px); 
+            -webkit-backdrop-filter: blur(12px); 
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            will-change: transform, backdrop-filter; /* CLAVE PARA SCROLL RÁPIDO */
+        }
         .dark .glass-panel { background: rgba(28, 28, 30, 0.85); border-bottom: 1px solid rgba(255,255,255,0.1); }
+        
         .card-glass { background: rgba(255, 255, 255, 0.7); border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 4px 24px rgba(0,0,0,0.04); }
-        .dark .card-glass { background: rgba(28, 28, 30, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .dark .card-glass { background: rgba(28, 28, 30, 0.6); border: 1px solid rgba(255,255,255,0.08); }
+        
+        /* Optimización: renderizado de blobs en capa separada */
         .blob-bg { will-change: transform; transform: translateZ(0); }
+        
         select, input, textarea { appearance: none; outline: none; background: transparent; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
+
+        /* Optimización: Contener repaints en la lista grande */
+        #history-container {
+            contain: content;
+        }
     </style>
     {% csrf_token %} 
 </head>
@@ -60,7 +88,7 @@
 
     <div class="max-w-2xl mx-auto px-4 pt-24">
         <header class="mb-6 px-1 animate-fade-in">
-            <h2 class="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Tu Progreso</h2>
+            <h2 class="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">JUST DO IT!</h2>
             <p class="text-slate-500 dark:text-slate-400 text-sm font-medium mt-1" id="current-date-display">Cargando...</p>
         </header>
 
@@ -81,19 +109,17 @@
                         <div class="p-5 hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
                             <label class="text-base font-semibold text-slate-700 dark:text-slate-200 block mb-2">Ejercicio</label>
                             <div class="relative group">
-                                <!-- SELECTOR POBLADO DESDE EL SERVIDOR -->
                                 <select id="exercise-select" required class="w-full text-lg font-medium text-slate-900 dark:text-white bg-transparent cursor-pointer pr-8 py-1 focus:text-iosblue transition-colors">
                                     <option value="" disabled selected class="text-gray-400 bg-white dark:bg-gray-800">Seleccionar...</option>
-                                    
-                                    <!-- LOOP DE DJANGO: Cargar historial -->
                                     {% for exercise in exercises_list %}
                                         <option value="{{ exercise }}" class="bg-white dark:bg-gray-800">{{ exercise }}</option>
                                     {% endfor %}
-                                    
                                     <option value="Otro" class="bg-white dark:bg-gray-800 font-bold text-iosblue">+ Nuevo Ejercicio</option>
                                 </select>
                                 <div class="absolute inset-y-0 right-0 flex items-center pointer-events-none text-iosblue group-hover:scale-110 transition-transform">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 9l4-4 4 4m0 6l-4 4-4-4"></path></svg>
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 9l4-4 4 4m0 6l-4 4-4-4"></path>
+                                    </svg>
                                 </div>
                             </div>
                             <div id="other-exercise-div" class="hidden mt-3 pt-3 border-t border-slate-100 dark:border-white/5 animate-fade-in">
@@ -132,12 +158,14 @@
             </section>
 
             <section class="animate-fade-in">
-                <div class="flex items-center justify-between px-2 mb-4"><h3 class="text-xl font-bold text-slate-900 dark:text-white">Historial</h3></div>
+                <div class="flex items-center justify-between px-2 mb-4">
+                    <h3 class="text-xl font-bold text-slate-900 dark:text-white">Historial</h3>
+                </div>
                 <div id="history-container" class="space-y-6">
                     {% if workouts_by_date %}
                         {% for date, workouts in workouts_by_date.items %}
                             <div class="date-group" data-date="{{ date|date:'Y-m-d' }}">
-                                <div class="sticky top-16 z-10 py-2 mb-2">
+                                <div class="sticky top-16 z-10 py-2 mb-2 pointer-events-none">
                                     <div class="inline-flex items-center px-3 py-1 rounded-full glass-panel border-0 shadow-sm backdrop-blur-xl">
                                         <span class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">{{ date|date:"l, d M" }}</span>
                                     </div>
@@ -147,15 +175,39 @@
                                         <div class="group relative p-5 hover:bg-white/60 dark:hover:bg-white/10 transition-colors workout-item" id="workout-{{ workout.id }}" data-id="{{ workout.id }}">
                                             <div class="flex justify-between items-center">
                                                 <div class="flex items-center gap-4">
-                                                    <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-500/20 dark:to-indigo-500/20 flex items-center justify-center text-iosblue shadow-inner"><span class="text-sm font-bold">{{ workout.exercise_name|slice:":1" }}</span></div>
-                                                    <div><h5 class="font-bold text-slate-900 dark:text-white text-sm workout-name">{{ workout.exercise_name }}</h5>
-                                                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5"><span class="workout-sets">{{ workout.sets }}</span> series <span class="text-gray-300 dark:text-gray-600 mx-1">/</span> <span class="workout-reps">{{ workout.reps }}</span></p></div>
+                                                    <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-500/20 dark:to-indigo-500/20 flex items-center justify-center text-iosblue shadow-inner">
+                                                        <span class="text-sm font-bold">{{ workout.exercise_name|slice:":1" }}</span>
+                                                    </div>
+                                                    <div>
+                                                        <h5 class="font-bold text-slate-900 dark:text-white text-sm workout-name">{{ workout.exercise_name }}</h5>
+                                                        <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                                                            <span class="workout-sets">{{ workout.sets }}</span> series
+                                                            <span class="text-gray-300 dark:text-gray-600 mx-1">/</span>
+                                                            <span class="workout-reps">{{ workout.reps }}</span>
+                                                        </p>
+                                                    </div>
                                                 </div>
-                                                <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-white/5 px-2 py-1 rounded-lg font-mono">{{ workout.created_at|localtime|date:"H:i" }}</span>
+                                                <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-white/5 px-2 py-1 rounded-lg font-mono">
+                                                    {{ workout.created_at|localtime|date:"H:i" }}
+                                                </span>
                                             </div>
                                             <div class="absolute right-4 top-1/2 -translate-y-1/2 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-4 group-hover:translate-x-0">
-                                                <button class="bg-white/90 dark:bg-gray-700/90 text-iosblue p-2 rounded-full shadow-sm hover:bg-blue-50 border border-gray-100 dark:border-gray-600 edit-btn hover:scale-110 transition-transform" data-id="{{ workout.id }}" data-name="{{ workout.exercise_name }}" data-sets="{{ workout.sets }}" data-reps="{{ workout.reps }}" data-date="{{ workout.created_at|localtime|date:'Y-m-d' }}"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg></button>
-                                                <button class="delete-btn bg-white/90 dark:bg-gray-700/90 text-red-500 p-2 rounded-full shadow-sm hover:bg-red-50 border border-gray-100 dark:border-gray-600 hover:scale-110 transition-transform" data-id="{{ workout.id }}"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg></button>
+                                                <button class="bg-white/90 dark:bg-gray-700/90 text-iosblue p-2 rounded-full shadow-sm hover:bg-blue-50 border border-gray-100 dark:border-gray-600 edit-btn hover:scale-110 transition-transform"
+                                                        data-id="{{ workout.id }}"
+                                                        data-name="{{ workout.exercise_name }}"
+                                                        data-sets="{{ workout.sets }}"
+                                                        data-reps="{{ workout.reps }}"
+                                                        data-date="{{ workout.created_at|localtime|date:'Y-m-d' }}">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                                                    </svg>
+                                                </button>
+                                                <button class="delete-btn bg-white/90 dark:bg-gray-700/90 text-red-500 p-2 rounded-full shadow-sm hover:bg-red-50 border border-gray-100 dark:border-gray-600 hover:scale-110 transition-transform"
+                                                        data-id="{{ workout.id }}">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                                    </svg>
+                                                </button>
                                             </div>
                                         </div>
                                     {% endfor %}
@@ -163,9 +215,13 @@
                             </div>
                         {% endfor %}
                     {% else %}
-                        <div id="no-records" class="text-center py-16 opacity-40 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl"><p class="text-sm text-slate-400 font-medium">Comienza tu registro</p></div>
+                        <div id="no-records" class="text-center py-16 opacity-40 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+                            <p class="text-sm text-slate-400 font-medium">Comienza tu registro</p>
+                        </div>
                     {% endif %}
                 </div>
+                <div id="scroll-sentinel" class="h-10 w-full"></div>
+                <div id="loader-indicator" class="hidden py-4 text-center text-slate-400 text-xs">Cargando más...</div>
             </section>
         </div>
 
@@ -173,25 +229,34 @@
             <section class="mb-10 px-1">
                 <div class="flex items-center justify-between mb-6">
                     <h3 class="text-xl font-bold text-slate-900 dark:text-white">Resumen Semanal</h3>
-                    <span class="text-xs text-slate-500 dark:text-gray-400 font-medium">{{ week_start|date:"d M" }} - {{ week_end|date:"d M" }}</span>
                 </div>
-                {% if weekly_summary %}
-                <div class="grid grid-cols-2 gap-4">
-                    {% for exercise, total in weekly_summary.items %}
-                        <div class="bg-white/60 dark:bg-gray-800/40 p-6 rounded-3xl flex flex-col items-center justify-center hover:bg-white/80 dark:hover:bg-white/10 transition-colors border border-white/40 dark:border-white/5 shadow-sm backdrop-blur-md">
-                            <span class="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-iosblue to-purple-500 mb-2">{{ total }}</span>
-                            <span class="text-xs font-bold text-slate-500 dark:text-gray-400 uppercase tracking-wider text-center truncate w-full">{{ exercise }}</span>
+                {% if weekly_summaries %}
+                    {% for week in weekly_summaries %}
+                        <div class="mb-8 bg-white/60 dark:bg-gray-800/40 p-6 rounded-3xl border border-white/40 dark:border-white/5 shadow-sm backdrop-blur-md">
+                            <div class="flex items-center justify-between mb-4">
+                                <span class="text-xs text-slate-500 dark:text-gray-400 font-medium">
+                                    Semana: {{ week.start|date:"d M" }} - {{ week.end|date:"d M" }}
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                {% for exercise, total in week.stats.items %}
+                                    <div class="bg-white/70 dark:bg-gray-800/40 p-6 rounded-3xl flex flex-col items-center justify-center hover:bg-white/80 dark:hover:bg-white/10 transition-colors border border-white/40 dark:border-white/5 shadow-sm backdrop-blur-md">
+                                        <span class="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-iosblue to-purple-500 mb-2">{{ total }}</span>
+                                        <span class="text-xs font-bold text-slate-500 dark:text-gray-400 uppercase tracking-wider text-center truncate w-full">{{ exercise }}</span>
+                                    </div>
+                                {% endfor %}
+                            </div>
                         </div>
                     {% endfor %}
-                </div>
                 {% else %}
-                    <div class="text-center py-20"><p class="text-slate-400 text-sm">Sin datos suficientes</p></div>
+                    <div class="text-center py-20">
+                        <p class="text-slate-400 text-sm">Sin datos suficientes</p>
+                    </div>
                 {% endif %}
             </section>
         </div>
     </div>
 
-    <!-- MODAL EDICIÓN -->
     <div id="edit-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background-color: rgba(0,0,0,0.3); backdrop-filter: blur(5px);">
         <div class="card-glass w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden transform scale-95 transition-all duration-200 opacity-0" id="edit-modal-content">
             <div class="p-6 border-b border-slate-200/50 dark:border-white/10 flex justify-between items-center bg-white/40 dark:bg-white/5">
@@ -199,175 +264,539 @@
                 <button onclick="closeEditModal()" class="w-8 h-8 bg-slate-200/50 dark:bg-white/10 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors">✕</button>
             </div>
             <form onsubmit="event.preventDefault(); saveEdit()" class="p-6 space-y-6 bg-white/80 dark:bg-black/80">
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Fecha</label><input type="date" id="edit-date" class="w-full bg-slate-100 dark:bg-gray-800 rounded-xl px-4 py-3 font-medium outline-none focus:ring-2 focus:ring-iosblue text-slate-900 dark:text-white"></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Ejercicio</label><input type="text" id="edit-exercise-name" class="w-full bg-slate-100 dark:bg-gray-800 rounded-xl px-4 py-3 font-medium outline-none focus:ring-2 focus:ring-iosblue text-slate-900 dark:text-white"></div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Fecha</label>
+                    <input type="date" id="edit-date" class="w-full bg-slate-100 dark:bg-gray-800 rounded-xl px-4 py-3 font-medium outline-none focus:ring-2 focus:ring-iosblue text-slate-900 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Ejercicio</label>
+                    <input type="text" id="edit-exercise-name" class="w-full bg-slate-100 dark:bg-gray-800 rounded-xl px-4 py-3 font-medium outline-none focus:ring-2 focus:ring-iosblue text-slate-900 dark:text-white">
+                </div>
                 <div class="grid grid-cols-2 gap-4">
-                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Series</label><input type="number" id="edit-sets" class="w-full bg-slate-100 dark:bg-gray-800 rounded-xl px-4 py-3 font-medium outline-none focus:ring-2 focus:ring-iosblue text-slate-900 dark:text-white text-center"><div class="flex gap-2 mt-2 justify-center"><button type="button" onclick="setEditInput('edit-sets', 3)" class="w-6 h-6 bg-slate-200/50 dark:bg-gray-700/50 rounded-full text-[10px] font-bold hover:bg-iosblue hover:text-white transition-colors">3</button><button type="button" onclick="setEditInput('edit-sets', 4)" class="w-6 h-6 bg-slate-200/50 dark:bg-gray-700/50 rounded-full text-[10px] font-bold hover:bg-iosblue hover:text-white transition-colors">4</button></div></div>
-                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Reps</label><input type="text" id="edit-reps" class="w-full bg-slate-100 dark:bg-gray-800 rounded-xl px-4 py-3 font-medium outline-none focus:ring-2 focus:ring-iosblue text-slate-900 dark:text-white text-center"><div class="flex gap-2 mt-2 justify-center"><button type="button" onclick="setEditInput('edit-reps', 10)" class="w-6 h-6 bg-slate-200/50 dark:bg-gray-700/50 rounded-full text-[10px] font-bold hover:bg-iosblue hover:text-white transition-colors">10</button><button type="button" onclick="setEditInput('edit-reps', 12)" class="w-6 h-6 bg-slate-200/50 dark:bg-gray-700/50 rounded-full text-[10px] font-bold hover:bg-iosblue hover:text-white transition-colors">12</button></div></div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Series</label>
+                        <input type="number" id="edit-sets" class="w-full bg-slate-100 dark:bg-gray-800 rounded-xl px-4 py-3 font-medium outline-none focus:ring-2 focus:ring-iosblue text-slate-900 dark:text-white text-center">
+                        <div class="flex gap-2 mt-2 justify-center">
+                            <button type="button" onclick="setEditInput('edit-sets', 3)" class="w-6 h-6 bg-slate-200/50 dark:bg-gray-700/50 rounded-full text-[10px] font-bold hover:bg-iosblue hover:text-white transition-colors">3</button>
+                            <button type="button" onclick="setEditInput('edit-sets', 4)" class="w-6 h-6 bg-slate-200/50 dark:bg-gray-700/50 rounded-full text-[10px] font-bold hover:bg-iosblue hover:text-white transition-colors">4</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Reps</label>
+                        <input type="text" id="edit-reps" class="w-full bg-slate-100 dark:bg-gray-800 rounded-xl px-4 py-3 font-medium outline-none focus:ring-2 focus:ring-iosblue text-slate-900 dark:text-white text-center">
+                        <div class="flex gap-2 mt-2 justify-center">
+                            <button type="button" onclick="setEditInput('edit-reps', 10)" class="w-6 h-6 bg-slate-200/50 dark:bg-gray-700/50 rounded-full text-[10px] font-bold hover:bg-iosblue hover:text-white transition-colors">10</button>
+                            <button type="button" onclick="setEditInput('edit-reps', 12)" class="w-6 h-6 bg-slate-200/50 dark:bg-gray-700/50 rounded-full text-[10px] font-bold hover:bg-iosblue hover:text-white transition-colors">12</button>
+                        </div>
+                    </div>
                 </div>
                 <button type="submit" class="w-full bg-iosblue text-white font-bold text-lg py-3.5 rounded-2xl active:scale-95 shadow-lg shadow-blue-500/30 transition-all">Guardar Cambios</button>
             </form>
         </div>
     </div>
+
     <div id="message-box" class="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 hidden px-6 py-3 rounded-full shadow-xl bg-white dark:bg-gray-800 text-sm font-bold border border-gray-100 dark:border-gray-700 transition-all duration-300 opacity-0 translate-y-10 text-slate-800 dark:text-white"></div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById('workout-date').value = today;
-            document.getElementById('current-date-display').textContent = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-            
-            window.setInput = (id, val) => document.getElementById(id).value = val;
-            window.setEditInput = (id, val) => document.getElementById(id).value = val;
-            
-            // Lógica TABS
-            window.switchMainTab = function(tab) {
-                if(tab==='log'){
-                    document.getElementById('view-log').classList.remove('hidden');
-                    document.getElementById('view-summary').classList.add('hidden');
-                    document.getElementById('tab-btn-log').classList.add('bg-white', 'dark:bg-gray-700', 'shadow-sm', 'text-slate-900', 'dark:text-white');
-                    document.getElementById('tab-btn-log').classList.remove('text-slate-500');
-                    document.getElementById('tab-btn-summary').classList.remove('bg-white', 'dark:bg-gray-700', 'shadow-sm', 'text-slate-900', 'dark:text-white');
-                } else {
-                    document.getElementById('view-summary').classList.remove('hidden');
-                    document.getElementById('view-log').classList.add('hidden');
-                    document.getElementById('tab-btn-summary').classList.add('bg-white', 'dark:bg-gray-700', 'shadow-sm', 'text-slate-900', 'dark:text-white');
-                    document.getElementById('tab-btn-log').classList.remove('bg-white', 'dark:bg-gray-700', 'shadow-sm', 'text-slate-900', 'dark:text-white');
-                }
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = document.getElementById('workout-form');
+        const dateInput = document.getElementById('workout-date');
+        const dateLabel = document.getElementById('current-date-display');
+        const selectEl = document.getElementById('exercise-select');
+        const otherDiv = document.getElementById('other-exercise-div');
+        const otherInput = document.getElementById('other-exercise-name');
+        const themeBtn = document.getElementById('theme-toggle-btn');
+        const tabLog = document.getElementById('tab-btn-log');
+        const tabSummary = document.getElementById('tab-btn-summary');
+        const viewLog = document.getElementById('view-log');
+        const viewSummary = document.getElementById('view-summary');
+        const historyContainer = document.getElementById('history-container');
+        const messageBox = document.getElementById('message-box');
+        const WORKOUT_URL_ROOT = '/workout/';
+        const HISTORY_URL = '/history/'; 
+
+        const todayISO = new Date().toISOString().split('T')[0];
+        if (dateInput) {
+            dateInput.value = todayISO;
+        }
+        if (dateLabel) {
+            dateLabel.textContent = new Date().toLocaleDateString('es-ES', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long'
+            });
+        }
+
+        window.setInput = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.value = val;
+        };
+
+        window.setEditInput = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.value = val;
+        };
+
+        function showMessage(msg, error = false) {
+            if (!messageBox) {
+                alert(msg);
+                return;
             }
+            messageBox.textContent = msg;
+            messageBox.className =
+                'fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-xl ' +
+                'bg-white dark:bg-gray-800 text-sm font-bold border border-gray-100 dark:border-gray-700 ' +
+                'transition-all duration-300 ' +
+                (error ? 'text-red-500' : 'text-green-600');
 
-            const themeToggle = (function() {
-                const htmlEl = document.documentElement;
-                const toggleBtn = document.getElementById('theme-toggle-btn');
-                const apply = (theme) => {
-                    if (theme === 'dark') { htmlEl.classList.add('dark'); toggleBtn.innerText = '🌙'; }
-                    else { htmlEl.classList.remove('dark'); toggleBtn.innerText = '☀️'; }
-                };
-                let current = localStorage.getItem('theme') || 'light';
-                apply(current);
-                return { toggle: () => { current = (current === 'light') ? 'dark' : 'light'; localStorage.setItem('theme', current); apply(current); } };
-            })();
-            document.getElementById('theme-toggle-btn').addEventListener('click', themeToggle.toggle);
-
-            const selectEl = document.getElementById('exercise-select');
-            const otherDiv = document.getElementById('other-exercise-div');
-            const otherInput = document.getElementById('other-exercise-name');
-            selectEl.addEventListener('change', () => {
-                if (selectEl.value === 'Otro') { otherDiv.classList.remove('hidden'); otherInput.required = true; otherInput.focus(); }
-                else { otherDiv.classList.add('hidden'); otherInput.required = false; }
+            messageBox.classList.remove('hidden', 'translate-y-10', 'opacity-0');
+            requestAnimationFrame(() => {
+                 messageBox.classList.add('translate-y-0', 'opacity-100');
             });
 
-            // --- Función para agregar opción nueva al select ---
-            function addOptionToSelect(name) {
-                // Verificar si ya existe para no duplicar
-                const options = Array.from(selectEl.options);
-                const exists = options.some(opt => opt.value === name);
-                if (!exists) {
-                    // Crear opción antes de "Otro"
-                    const newOption = document.createElement('option');
-                    newOption.value = name;
-                    newOption.text = name;
-                    newOption.className = "bg-white dark:bg-gray-800";
-                    // Insertar antes del último elemento (que suele ser 'Otro')
-                    selectEl.add(newOption, selectEl.length - 1);
+            setTimeout(() => {
+                messageBox.classList.remove('translate-y-0', 'opacity-100');
+                messageBox.classList.add('translate-y-10', 'opacity-0');
+                setTimeout(() => messageBox.classList.add('hidden'), 300);
+            }, 2500);
+        }
+
+        function getCookie(name) {
+            let v = null;
+            if (document.cookie && document.cookie !== '') {
+                document.cookie.split(';').forEach(c => {
+                    const trimmed = c.trim();
+                    if (trimmed.startsWith(name + '=')) {
+                        v = decodeURIComponent(trimmed.substring(name.length + 1));
+                    }
+                });
+            }
+            return v;
+        }
+        const csrfToken = getCookie('csrftoken');
+
+        window.switchMainTab = function(tab) {
+            if (!viewLog || !viewSummary || !tabLog || !tabSummary) return;
+
+            if (tab === 'log') {
+                viewLog.classList.remove('hidden');
+                viewSummary.classList.add('hidden');
+                tabLog.classList.add('bg-white', 'dark:bg-gray-700', 'shadow-sm', 'text-slate-900', 'dark:text-white');
+                tabSummary.classList.remove('bg-white', 'dark:bg-gray-700', 'shadow-sm', 'text-slate-900', 'dark:text-white');
+            } else {
+                viewSummary.classList.remove('hidden');
+                viewLog.classList.add('hidden');
+                tabSummary.classList.add('bg-white', 'dark:bg-gray-700', 'shadow-sm', 'text-slate-900', 'dark:text-white');
+                tabLog.classList.remove('bg-white', 'dark:bg-gray-700', 'shadow-sm', 'text-slate-900', 'dark:text-white');
+            }
+        };
+        window.switchMainTab('log');
+
+        if (themeBtn) {
+            const html = document.documentElement;
+            function applyTheme(theme) {
+                if (theme === 'dark') {
+                    html.classList.add('dark');
+                    themeBtn.textContent = '☀️';
+                } else {
+                    html.classList.remove('dark');
+                    themeBtn.textContent = '🌙';
                 }
             }
+            let currentTheme = localStorage.getItem('theme') || 'light';
+            applyTheme(currentTheme);
 
-            function showMessage(msg, error = false) {
-                const box = document.getElementById('message-box');
-                box.textContent = msg;
-                box.className = `fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-xl bg-white dark:bg-gray-800 text-sm font-bold border border-gray-100 dark:border-gray-700 transition-all duration-300 ${error ? 'text-red-500' : 'text-green-600'}`;
-                box.classList.remove('hidden', 'translate-y-10', 'opacity-0');
-                box.classList.add('translate-y-0', 'opacity-100');
-                setTimeout(() => { box.classList.remove('translate-y-0', 'opacity-100'); box.classList.add('translate-y-10', 'opacity-0'); setTimeout(() => box.classList.add('hidden'), 300); }, 2500);
-            }
-            
-            function getCookie(name) {
-                let v = null;
-                if (document.cookie && document.cookie !== '') {
-                    document.cookie.split(';').forEach(c => { if (c.trim().startsWith(name + '=')) v = decodeURIComponent(c.trim().substring(name.length + 1)); });
-                } return v;
-            }
-            const csrfToken = getCookie('csrftoken');
-            const WORKOUT_URL_ROOT = '/workout/';
+            themeBtn.addEventListener('click', () => {
+                currentTheme = currentTheme === 'light' ? 'dark' : 'light';
+                localStorage.setItem('theme', currentTheme);
+                applyTheme(currentTheme);
+            });
+        }
 
-            function getWorkoutHTML(workout) {
-                 return `<div class="group relative p-5 hover:bg-white/50 dark:hover:bg-white/5 transition-colors workout-item animate-slide-in" id="workout-${workout.id}" data-id="${workout.id}">
+        function addOptionToSelect(name) {
+            if (!selectEl || !name) return;
+            const options = Array.from(selectEl.options);
+            const exists = options.some(o => o.value === name);
+            if (exists) return;
+
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            opt.className = 'bg-white dark:bg-gray-800';
+
+            const lastIndex = selectEl.options.length - 1;
+            selectEl.add(opt, lastIndex >= 0 ? selectEl.options[lastIndex] : null);
+        }
+
+        if (selectEl && otherDiv && otherInput) {
+            selectEl.addEventListener('change', () => {
+                if (selectEl.value === 'Otro') {
+                    otherDiv.classList.remove('hidden');
+                    otherInput.required = true;
+                    otherInput.focus();
+                } else {
+                    otherDiv.classList.add('hidden');
+                    otherInput.required = false;
+                }
+            });
+        }
+
+        let currentEditId = null;
+        const editModal = document.getElementById('edit-modal');
+        const editContent = document.getElementById('edit-modal-content');
+        const editNameInput = document.getElementById('edit-exercise-name');
+        const editSetsInput = document.getElementById('edit-sets');
+        const editRepsInput = document.getElementById('edit-reps');
+        const editDateInput = document.getElementById('edit-date');
+
+        window.openEditModal = (id, name, sets, reps, date) => {
+            if (!editModal || !editContent) return;
+            currentEditId = id;
+            if (editNameInput) editNameInput.value = name || '';
+            if (editSetsInput) editSetsInput.value = sets || '';
+            if (editRepsInput) editRepsInput.value = reps || '';
+            if (editDateInput) editDateInput.value = date || '';
+
+            editModal.classList.remove('hidden');
+            requestAnimationFrame(() => {
+                editContent.classList.remove('scale-95', 'opacity-0');
+                editContent.classList.add('scale-100', 'opacity-100');
+            });
+        };
+
+        window.closeEditModal = () => {
+            if (!editModal || !editContent) return;
+            editContent.classList.remove('scale-100', 'opacity-100');
+            editContent.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => editModal.classList.add('hidden'), 200);
+        };
+
+        window.saveEdit = async () => {
+            if (!currentEditId) return;
+
+            const payload = {
+                exercise_name: editNameInput ? editNameInput.value : '',
+                sets: editSetsInput ? editSetsInput.value : '',
+                reps: editRepsInput ? editRepsInput.value : '',
+                date: editDateInput ? editDateInput.value : ''
+            };
+
+            try {
+                const res = await fetch(`${WORKOUT_URL_ROOT}${currentEditId}/`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    window.location.reload();
+                } else {
+                    showMessage('Error al editar', true);
+                }
+            } catch (err) {
+                showMessage('Error de conexión', true);
+            }
+        };
+
+        if (editModal) {
+            editModal.addEventListener('click', e => {
+                if (e.target === editModal) {
+                    window.closeEditModal();
+                }
+            });
+        }
+
+        // =============================
+        //  HTML PARA UN WORKOUT
+        // =============================
+        function getWorkoutHTML(workout) {
+            return `
+                <div class="group relative p-5 hover:bg-white/60 dark:hover:bg-white/10 transition-colors workout-item" id="workout-${workout.id}" data-id="${workout.id}">
                     <div class="flex justify-between items-center">
                         <div class="flex items-center gap-4">
-                            <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 flex items-center justify-center text-iosblue shadow-inner"><span class="text-sm font-bold">${workout.exercise_name.charAt(0)}</span></div>
-                            <div><h5 class="font-bold text-slate-900 dark:text-white text-sm workout-name">${workout.exercise_name}</h5>
-                            <p class="text-xs text-slate-500 dark:text-gray-400 font-medium mt-0.5"><span class="workout-sets">${workout.sets}</span> series <span class="text-gray-300 dark:text-gray-600 mx-1">/</span> <span class="workout-reps">${workout.reps}</span></p></div>
+                            <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-500/20 dark:to-indigo-500/20 flex items-center justify-center text-iosblue shadow-inner">
+                                <span class="text-sm font-bold">${workout.exercise_name.charAt(0)}</span>
+                            </div>
+                            <div>
+                                <h5 class="font-bold text-slate-900 dark:text-white text-sm workout-name">${workout.exercise_name}</h5>
+                                <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                                    <span class="workout-sets">${workout.sets}</span> series
+                                    <span class="text-gray-300 dark:text-gray-600 mx-1">/</span>
+                                    <span class="workout-reps">${workout.reps}</span>
+                                </p>
+                            </div>
                         </div>
-                        <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-white/5 px-2 py-1 rounded-lg font-mono">${workout.time}</span>
+                        <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-white/5 px-2 py-1 rounded-lg font-mono">
+                            ${workout.time}
+                        </span>
                     </div>
                     <div class="absolute right-4 top-1/2 -translate-y-1/2 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-4 group-hover:translate-x-0">
-                        <button class="p-2 text-gray-400 hover:text-iosblue bg-gray-100 dark:bg-gray-700 rounded-full edit-btn" data-id="${workout.id}" data-name="${workout.exercise_name}" data-sets="${workout.sets}" data-reps="${workout.reps}" data-date="${workout.date}"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg></button>
-                        <button class="delete-btn p-2 text-gray-400 hover:text-iosred bg-gray-100 dark:bg-gray-700 rounded-full" data-id="${workout.id}"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg></button>
+                        <button class="bg-white/90 dark:bg-gray-700/90 text-iosblue p-2 rounded-full shadow-sm hover:bg-blue-50 border border-gray-100 dark:border-gray-600 edit-btn"
+                                data-id="${workout.id}"
+                                data-name="${workout.exercise_name}"
+                                data-sets="${workout.sets}"
+                                data-reps="${workout.reps}"
+                                data-date="${workout.date}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                            </svg>
+                        </button>
+                        <button class="delete-btn bg-white/90 dark:bg-gray-700/90 text-red-500 p-2 rounded-full shadow-sm hover:bg-red-50 border border-gray-100 dark:border-gray-600"
+                                data-id="${workout.id}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                        </button>
                     </div>
-                </div>`;
+                </div>
+            `;
+        }
+
+        window.deleteWorkout = async (id) => {
+            if (!id) return;
+            if (!confirm('¿Eliminar registro?')) return;
+
+            try {
+                const res = await fetch(`${WORKOUT_URL_ROOT}${id}/`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrfToken }
+                });
+
+                if (res.status === 204) {
+                    const item = document.querySelector(`.workout-item[data-id="${id}"], #workout-${id}`);
+                    if (item) {
+                        const dateGroup = item.closest('.date-group');
+                        item.remove();
+                        if (dateGroup && dateGroup.querySelectorAll('.workout-item').length === 0) {
+                            dateGroup.remove();
+                        }
+                    }
+                    showMessage('Eliminado');
+                } else {
+                    showMessage('Error al borrar', true);
+                }
+            } catch (err) {
+                showMessage('Error de conexión', true);
             }
+        };
 
-            // ... (Funciones deleteWorkout, openEditModal, closeEditModal, saveEdit permanecen igual) ...
-             window.deleteWorkout = async (id) => { if(!confirm('¿Eliminar?')) return; try { const res = await fetch(`${WORKOUT_URL_ROOT}${id}/`, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken } }); if(res.status === 204) { const item = document.querySelector(`.workout-item[data-id="${id}"]`); if(item) { item.remove(); setTimeout(() => window.location.reload(), 200); } else showMessage('Eliminado'); } else showMessage('Error al borrar', true); } catch(e) { showMessage('Error conexión', true); } }
-            let currentEditId = null;
-            window.openEditModal = (id, name, sets, reps, date) => { currentEditId = id; document.getElementById('edit-exercise-name').value = name; document.getElementById('edit-sets').value = sets; document.getElementById('edit-reps').value = reps; document.getElementById('edit-date').value = date; const modal = document.getElementById('edit-modal'); const content = document.getElementById('edit-modal-content'); modal.classList.remove('hidden'); setTimeout(() => { content.classList.remove('scale-95', 'opacity-0'); content.classList.add('scale-100', 'opacity-100'); }, 10); }
-            window.closeEditModal = () => { const modal = document.getElementById('edit-modal'); const content = document.getElementById('edit-modal-content'); content.classList.remove('scale-100', 'opacity-100'); content.classList.add('scale-95', 'opacity-0'); setTimeout(() => modal.classList.add('hidden'), 200); }
-            window.saveEdit = async () => { const name = document.getElementById('edit-exercise-name').value; const sets = document.getElementById('edit-sets').value; const reps = document.getElementById('edit-reps').value; const date = document.getElementById('edit-date').value; try { const res = await fetch(`${WORKOUT_URL_ROOT}${currentEditId}/`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }, body: JSON.stringify({ exercise_name: name, sets, reps, date }) }); if(res.ok) { window.location.reload(); } else showMessage('Error editar', true); } catch(e) { showMessage('Error conexión', true); } }
+        document.addEventListener('click', e => {
+            const editBtn = e.target.closest('.edit-btn');
+            const delBtn = e.target.closest('.delete-btn');
 
-            document.addEventListener('click', e => { const editBtn = e.target.closest('.edit-btn'); const delBtn = e.target.closest('.delete-btn'); if (editBtn) openEditModal(editBtn.dataset.id, editBtn.dataset.name, editBtn.dataset.sets, editBtn.dataset.reps, editBtn.dataset.date); if (delBtn) deleteWorkout(delBtn.dataset.id); });
+            if (editBtn) {
+                openEditModal(
+                    editBtn.dataset.id,
+                    editBtn.dataset.name,
+                    editBtn.dataset.sets,
+                    editBtn.dataset.reps,
+                    editBtn.dataset.date
+                );
+            }
+            if (delBtn) {
+                deleteWorkout(delBtn.dataset.id);
+            }
+        });
 
-
-            document.getElementById('workout-form').addEventListener('submit', async (e) => {
+        if (form) {
+            form.addEventListener('submit', async (e) => {
                 e.preventDefault();
+
                 const btn = document.getElementById('submit-btn');
-                const originalText = btn.innerText;
-                btn.disabled = true; btn.innerText = '...';
+                const originalText = btn ? btn.innerText : '';
 
-                const name = (selectEl.value === 'Otro') ? otherInput.value : selectEl.value;
-                const date = document.getElementById('workout-date').value;
-                const sets = document.getElementById('sets').value;
-                const reps = document.getElementById('reps').value;
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerText = '...';
+                }
 
-                if(!name) { showMessage('Elige un ejercicio', true); btn.disabled = false; btn.innerText = originalText; return; }
+                const name = selectEl && selectEl.value === 'Otro'
+                    ? (otherInput ? otherInput.value : '')
+                    : (selectEl ? selectEl.value : '');
+
+                const payload = {
+                    exercise_name: name,
+                    sets: document.getElementById('sets')?.value || '0',
+                    reps: document.getElementById('reps')?.value || '0',
+                    date: dateInput ? dateInput.value : todayISO
+                };
+
+                if (!name) {
+                    showMessage('Elige un ejercicio', true);
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerText = originalText;
+                    }
+                    return;
+                }
 
                 try {
-                    const res = await fetch('/', {
+                    const res = await fetch(window.location.pathname, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                        body: JSON.stringify({ exercise_name: name, sets, reps, date })
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
+                        },
+                        body: JSON.stringify(payload)
                     });
+
                     const data = await res.json();
-                    if(res.ok && data.success) {
+
+                    if (res.ok && data.success) {
                         showMessage('¡Guardado!');
-                        
-                        // -- AGREGAR NUEVA OPCIÓN AL SELECT --
-                        if (selectEl.value === 'Otro') {
+
+                        if (selectEl && selectEl.value === 'Otro' && otherInput) {
                             addOptionToSelect(name);
-                            // Resetear visualmente el select
                             selectEl.value = name;
                             otherDiv.classList.add('hidden');
                             otherInput.required = false;
+                            otherInput.value = '';
                         }
-                        
-                        const dateRaw = date;
-                        let group = document.querySelector(`.date-group[data-date="${dateRaw}"]`);
-                        
-                        if(!group) {
-                             setTimeout(() => window.location.reload(), 300);
+
+                        const group = document.querySelector(`.date-group[data-date="${payload.date}"]`);
+
+                        if (!group) {
+                            setTimeout(() => window.location.reload(), 300);
                         } else {
-                             const list = group.querySelector('.workout-list');
-                             const now = new Date();
-                             const timeStr = now.toLocaleTimeString('es-ES', {hour: '2-digit', minute:'2-digit'});
-                             const newItem = getWorkoutHTML({ id: data.id, exercise_name: name, sets: sets, reps: reps, time: timeStr, date: dateRaw });
-                             list.insertAdjacentHTML('afterbegin', newItem);
-                             const noRec = document.getElementById('no-records'); if(noRec) noRec.remove();
+                            const list = group.querySelector('.workout-list');
+                            if (list) {
+                                const now = new Date();
+                                const timeStr = now.toLocaleTimeString('es-ES', {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                });
+
+                                const workout = {
+                                    id: data.id,
+                                    exercise_name: payload.exercise_name,
+                                    sets: payload.sets,
+                                    reps: payload.reps,
+                                    time: timeStr,
+                                    date: payload.date
+                                };
+
+                                list.insertAdjacentHTML('afterbegin', getWorkoutHTML(workout));
+                                const noRec = document.getElementById('no-records');
+                                if (noRec) noRec.remove();
+                            }
                         }
-                        btn.disabled = false; btn.innerText = originalText;
-                    } else { showMessage(data.message || 'Error', true); btn.disabled = false; btn.innerText = originalText; }
-                } catch(e) { showMessage('Error conexión', true); btn.disabled = false; btn.innerText = originalText; }
+
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.innerText = originalText;
+                        }
+                    } else {
+                        showMessage(data.message || 'Error al guardar', true);
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.innerText = originalText;
+                        }
+                    }
+                } catch (err) {
+                    showMessage('Error de conexión', true);
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerText = originalText;
+                    }
+                }
             });
-        });
+        }
+
+        let historyPage = 1;
+        let historyHasNext = true;
+        let historyLoading = false;
+        const loaderIndicator = document.getElementById('loader-indicator');
+
+        function formatDateLabel(isoDate) {
+            const d = new Date(isoDate);
+            return d.toLocaleDateString('es-ES', {
+                weekday: 'long',
+                day: '2-digit',
+                month: 'short'
+            });
+        }
+
+        function createDateGroupNode(group) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'date-group';
+            wrapper.dataset.date = group.date;
+
+            const label = formatDateLabel(group.date);
+
+            let inner = `
+                <div class="sticky top-16 z-10 py-2 mb-2 pointer-events-none">
+                    <div class="inline-flex items-center px-3 py-1 rounded-full glass-panel border-0 shadow-sm backdrop-blur-xl">
+                        <span class="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">${label}</span>
+                    </div>
+                </div>
+                <div class="bg-white/70 dark:bg-gray-800/60 rounded-3xl overflow-hidden shadow-sm divide-y divide-slate-100 dark:divide-white/5 workout-list border border-white/40 dark:border-white/5">
+            `;
+
+            if (Array.isArray(group.workouts)) {
+                group.workouts.forEach(w => {
+                    inner += getWorkoutHTML(w);
+                });
+            }
+
+            inner += `</div>`;
+            wrapper.innerHTML = inner;
+            return wrapper;
+        }
+
+        async function loadMoreHistory() {
+            if (historyLoading || !historyHasNext) return;
+            historyLoading = true;
+            if(loaderIndicator) loaderIndicator.classList.remove('hidden');
+
+            try {
+                const res = await fetch(`${HISTORY_URL}?page=${historyPage + 1}`);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+
+                historyPage = data.page;
+                historyHasNext = data.has_next;
+
+                if (Array.isArray(data.results) && historyContainer) {
+                    data.results.forEach(group => {
+                        if (!document.querySelector(`.date-group[data-date="${group.date}"]`)) {
+                            const node = createDateGroupNode(group);
+                            historyContainer.appendChild(node);
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('Error cargando historial:', err);
+            } finally {
+                historyLoading = false;
+                if(loaderIndicator) loaderIndicator.classList.add('hidden');
+            }
+        }
+
+        const scrollSentinel = document.getElementById('scroll-sentinel');
+        
+        if (scrollSentinel && 'IntersectionObserver' in window) {
+            const observer = new IntersectionObserver((entries) => {
+                if (entries[0].isIntersecting && historyHasNext && !historyLoading) {
+                    loadMoreHistory();
+                }
+            }, {
+                rootMargin: '200px' 
+            });
+            observer.observe(scrollSentinel);
+        } else {
+            window.addEventListener('scroll', () => {
+                if (!historyHasNext || historyLoading) return;
+                const scrollPos = window.innerHeight + window.scrollY;
+                const threshold = document.body.offsetHeight - 400;
+                if (scrollPos >= threshold) {
+                    loadMoreHistory();
+                }
+            }, { passive: true });
+        }
+    });
     </script>
 </body>
 </html>

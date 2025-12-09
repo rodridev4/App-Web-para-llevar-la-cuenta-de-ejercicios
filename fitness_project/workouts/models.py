@@ -1,27 +1,32 @@
 from django.db import models
+from django.utils import timezone
+
 
 class Workout(models.Model):
     """
-    Modelo que representa un ejercicio registrado.
+    Modelo optimizado para registrar ejercicios.
     """
-    # Identificador del usuario
-    user_id = models.CharField(max_length=255, default='anonymous')
-    
-    # Nombre del ejercicio
-    exercise_name = models.CharField(max_length=100)
-    
-    # Cantidad de series
-    sets = models.IntegerField()
-    
-    # Cantidad de repeticiones o descripción de carga
-    reps = models.CharField(max_length=50)
-    
-    # Fecha y hora de creación
-    created_at = models.DateTimeField(auto_now_add=True)
+
+    user_id = models.CharField(max_length=255, db_index=True, default="public-user")
+
+    exercise_name = models.CharField(max_length=100, db_index=True)
+
+    sets = models.PositiveIntegerField()
+
+    reps = models.CharField(max_length=100)
+
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
 
     class Meta:
-        db_table = 'workouts'
-        ordering = ['-created_at']
+        db_table = "workouts"
+
+        ordering = ["-created_at"]
+
+        indexes = [
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["exercise_name"]),
+            models.Index(fields=["user_id", "created_at"]),
+        ]
 
     def __str__(self):
         return f"{self.exercise_name} ({self.created_at})"
